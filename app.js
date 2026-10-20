@@ -327,12 +327,14 @@ function resultView() {
     </section>
     ${r.change ? `<div class="banner ${r.change > 0 ? 'error' : 'busy'}">Traffic changed: leave ${Math.abs(r.change)} min ${r.change > 0 ? 'EARLIER' : 'later'} than the last check.</div>` : ''}
     <p class="hint center">${trafficText} · checked ${fmtTime(r.checkedAt)}${autoOn ? ' · auto-updating every 5 min' : ''}</p>
+    ${r.stopped ? `<div class="banner busy">⏹ Trip stopped: no more traffic checks${r.stopped === 'nav' ? ' while you navigate' : ''}. Tap “Refresh traffic” to start again.</div>` : ''}
     <ol class="timeline">${rows}</ol>
-    <a class="wide primary button" href="${esc(googleMapsUrl(stops.map((s) => s.place)))}" target="_blank" rel="noopener">Open in Google Maps</a>
+    <a class="wide primary button" data-act="navigate" href="${esc(googleMapsUrl(stops.map((s) => s.place)))}" target="_blank" rel="noopener">Open in Google Maps</a>
     <div class="row">
       <button data-act="refresh" ${state.busy ? 'disabled' : ''}>↻ Refresh traffic</button>
       <button data-act="go-plan">Edit trip</button>
     </div>
+    ${!r.stopped && plan.mode !== 'nodeadline' ? '<button class="wide" data-act="stop-trip">⏹ Stop trip (no more traffic checks)</button>' : ''}
     ${state.trip.name ? '' : '<button class="wide" data-act="save-trip">💾 Save this trip</button>'}`;
 }
 
@@ -442,7 +444,7 @@ function fail(msg) { state.busy = ''; state.error = msg; render(); }
 
 function shouldAutoRefresh() {
   const r = state.result;
-  if (!r || r.plan.mode === 'nodeadline') return false;
+  if (!r || r.stopped || r.plan.mode === 'nodeadline') return false;
   if (r.plan.mode === 'late') return Date.now() < r.plan.deadline.getTime();
   return r.plan.leaveAt - Date.now() <= AUTO_REFRESH_WITHIN && Date.now() < r.plan.leaveAt.getTime() + 15 * MIN;
 }
@@ -477,6 +479,9 @@ const actions = {
   },
   calculate() { calculate(); },
   refresh() { calculate({ compare: true }); },
+  'stop-trip'() { state.result.stopped = 'user'; render(); },
+  // Heading out with Google Maps: no need to keep checking traffic here.
+  navigate() { state.result.stopped = 'nav'; setTimeout(render, 0); },
   'go-plan'() { state.view = 'plan'; render(); },
   'save-trip'() {
     const t = state.trip;
