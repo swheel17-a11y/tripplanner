@@ -357,11 +357,14 @@ function settingsView() {
   return `${banner()}
     <section class="card">
       <h2>Google Maps API key</h2>
-      <p class="hint">Stored only on this phone. See the README for how to create and lock it down.</p>
-      <input type="password" id="api-key" value="${esc(state.apiKey)}" placeholder="Paste key here" autocomplete="off">
+      ${state.apiKey
+        ? `<p class="key-status ok">✓ Saved on this device (ends in …${esc(state.apiKey.slice(-4))})</p>`
+        : '<p class="key-status bad">No key saved on this device yet.</p>'}
+      <p class="hint">Each phone, computer, and home-screen app keeps its own copy. See the README for how to create and lock down a key.</p>
+      <input type="text" id="api-key" placeholder="${state.apiKey ? 'Paste a new key to replace it' : 'Paste key here'}"
+        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-1p-ignore data-lpignore="true">
       <div class="row">
         <button class="primary" data-act="save-key">Save key</button>
-        <button data-act="toggle-key">Show</button>
       </div>
     </section>
     <section class="card">
@@ -498,15 +501,15 @@ const actions = {
     if (!confirm(`Delete “${state.saved[i].name}”?`)) return;
     state.saved.splice(i, 1); store.set('saved', state.saved); render();
   },
-  'save-key'() {
+  async 'save-key'() {
     const key = $('#api-key').value.trim();
-    store.set('key', key);
+    if (!key) return fail('Paste your key into the box first.');
+    try { store.set('key', key); } catch { /* checked just below */ }
+    if (store.get('key', '') !== key) {
+      return fail('This browser won’t save data for this site (private browsing, or “block all cookies/site data” is on). The key can’t be remembered here.');
+    }
+    await askToKeepData();
     location.reload(); // Google Maps can only load once per page, so start fresh with the new key
-  },
-  'toggle-key'(_, el) {
-    const input = $('#api-key');
-    input.type = input.type === 'password' ? 'text' : 'password';
-    el.textContent = input.type === 'password' ? 'Show' : 'Hide';
   },
   export() {
     const blob = new Blob([JSON.stringify({ saved: state.saved }, null, 2)], { type: 'application/json' });
@@ -566,15 +569,21 @@ document.addEventListener('change', async (e) => {
 
 // ---------- Start up ----------
 
+/** Ask the browser not to clear this app's saved data when space runs low. */
+async function askToKeepData() {
+  try { await navigator.storage?.persist?.(); } catch { /* not supported: fine */ }
+}
+
 async function init() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
   if (!state.apiKey) {
     state.view = 'settings';
-    state.error = 'Welcome! Paste your Google Maps API key to get started.';
+    state.error = 'No Google Maps key on this device yet. Paste your key below to get started.';
     render();
     return;
   }
   render();
+  askToKeepData();
   try {
     await loadGoogleMaps(state.apiKey, () => fail('Google rejected the API key. Check that it is correct and allowed for this website (see README).'));
     search = await startPlaceSearch();
