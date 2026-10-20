@@ -42,11 +42,10 @@ No backend, no build step: plain HTML/CSS/JavaScript.
      `https://YOUR-GITHUB-USERNAME.github.io/*`.
      The key now only works on your site. Anyone who copies it can't use it elsewhere.
    - **API restrictions → Restrict key**, then tick only the 3 APIs above. **Save.**
-5. **Hard daily caps** (this is what actually prevents a surprise bill):
-   ☰ → *Google Maps Platform → Quotas*. For **Routes API** and **Places API (New)**, set
-   "requests per day" to something like **500**.
-   (One "When do I leave?" uses roughly 5–10 route requests.)
-6. **Budget alert** (an email warning, not a cap): ☰ → *Billing → Budgets & alerts → Create
+5. **Daily safety limit:** Google doesn't let you lower the Routes API daily quota, so the app
+   has its own cap of **200 drive-time requests per phone per day**. Today's count is in
+   *Settings → Usage today*. One "When do I leave?" uses roughly 5–10.
+6. **Budget alert** (an email warning, so you'd hear about anything unusual): ☰ → *Billing → Budgets & alerts → Create
    budget*, set $5, keep the default alert emails.
 
 The key is **never put in the code**. You paste it into the app's **Settings** screen, and it's
