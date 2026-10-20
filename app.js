@@ -1,7 +1,7 @@
 // app.js — screens, saved trips, and wiring the planner to Google.
 import { planTrip, floorToMinute, ceilToMinute } from './planner.js';
 import {
-  loadGoogleMaps, makeDurationFn, createPlacePicker, getCurrentPosition, googleMapsUrl,
+  loadGoogleMaps, makeDurationFn, startPlaceSearch, getCurrentPosition, googleMapsUrl,
   requestsToday, DAILY_LIMIT,
 } from './maps.js';
 
@@ -34,6 +34,8 @@ const state = {
   mapsReady: false,
   lastGps: null,
 };
+
+let search = null; // Google address search, ready once Maps loads
 
 const saveTrip = () => store.set('current', state.trip);
 
@@ -128,13 +130,13 @@ function stopCard(s, i) {
   </li>`;
 }
 
-/** Each address spot shows either the chosen place or a Google search box. */
+/** Each address spot shows either the chosen place (✓) or our search box. */
 function fillPlaceSlots() {
-  document.querySelectorAll('.slot').forEach(async (slot) => {
+  document.querySelectorAll('.slot').forEach((slot) => {
     const key = slot.dataset.slot;
     const target = key === 'start' ? state.trip.start : state.trip.stops[key];
     if (target.place) {
-      slot.innerHTML = `<div class="chip"><div><b>${esc(target.place.name)}</b><small>${esc(target.place.address)}</small></div>
+      slot.innerHTML = `<div class="chip"><span class="tick">✓</span><div><b>${esc(target.place.name)}</b><small>${esc(target.place.address)}</small></div>
         <button data-act="change-place" data-slot="${key}">Change</button></div>`;
       return;
     }
@@ -142,13 +144,89 @@ function fillPlaceSlots() {
       slot.innerHTML = '<p class="hint">Add your Google Maps key in Settings to search addresses.</p>';
       return;
     }
-    const picker = await createPlacePicker((place) => {
-      target.place = place;
+    mountPicker(slot, target);
+  });
+}
+
+/**
+ * Search box: type → "Searching…" → tap a match. Typed text is kept on the stop
+ * (target.typed) so "When do I leave?" can look it up if no match was tapped.
+ */
+function mountPicker(slot, target) {
+  slot.innerHTML = `<div class="picker">
+      <input type="search" placeholder="Search a place or address" autocomplete="off" enterkeyhint="search" value="${esc(target.typed || '')}">
+      <p class="picker-status"></p>
+      <ul class="suggestions"></ul>
+    </div>`;
+  const input = slot.querySelector('input');
+  const status = slot.querySelector('.picker-status');
+  const list = slot.querySelector('.suggestions');
+  let timer, seq = 0, results = [];
+
+  const show = (msg, kind = '') => { status.textContent = msg; status.className = `picker-status ${kind}`; };
+
+  async function lookup() {
+    const text = input.value.trim();
+    target.typed = text;
+    saveTrip();
+    results = [];
+    list.innerHTML = '';
+    if (text.length < 3) return show(text ? 'Keep typing…' : '');
+    const mine = ++seq;
+    show('Searching…', 'searching');
+    try {
+      const found = await search.suggest(text, state.lastGps);
+      if (mine !== seq) return; // a newer search has started
+      results = found;
+      if (!found.length) return show('No matches. Try adding the street or town.', 'bad');
+      show('Tap the right one:');
+      list.innerHTML = found.map((r, i) => `<li><button type="button" data-pick="${i}">
+        <b>${esc(r.main)}</b><small>${esc(r.secondary)}</small></button></li>`).join('');
+    } catch (err) {
+      if (mine === seq) show(err.message, 'bad');
+    }
+  }
+
+  async function choose(r) {
+    seq++;
+    list.innerHTML = '';
+    show('Getting location…', 'searching');
+    try {
+      target.place = await search.choose(r);
+      delete target.typed;
       saveTrip();
       render();
-    }, state.lastGps);
-    slot.replaceChildren(picker);
+    } catch (err) {
+      show(err.message, 'bad');
+    }
+  }
+
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(lookup, 300); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); if (results[0]) choose(results[0]); }
   });
+  list.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pick]');
+    if (b) choose(results[+b.dataset.pick]);
+  });
+  if (target.typed) show('Not picked yet. Keep typing to see matches, or tap “When do I leave?” to use the top match.');
+}
+
+/** Before planning: any box with typed text but no tapped match gets Google's top match. */
+async function resolveTypedAddresses() {
+  const t = state.trip;
+  const boxes = t.stops.map((s, i) => [s, `stop ${i + 1}`]);
+  if (t.start.type === 'place') boxes.unshift([t.start, 'the start']);
+  for (const [target, label] of boxes) {
+    if (target.place) continue;
+    if (!target.typed) throw new Error(`Type an address for ${label}.`);
+    setBusy(`Looking up “${target.typed}”…`);
+    const [best] = await search.suggest(target.typed, state.lastGps);
+    if (!best) throw new Error(`Couldn’t find “${target.typed}” for ${label}. Try a fuller address.`);
+    target.place = await search.choose(best);
+    delete target.typed;
+  }
+  saveTrip();
 }
 
 function resultView() {
@@ -257,12 +335,10 @@ function settingsView() {
 async function calculate({ compare = false } = {}) {
   const t = state.trip;
   state.error = '';
-  const missing = t.stops.findIndex((s) => !s.place);
-  if (missing !== -1) return fail(`Pick an address for stop ${missing + 1}.`);
-  if (t.start.type === 'place' && !t.start.place) return fail('Pick a start address, or use My location.');
   if (!state.mapsReady) return fail('Add your Google Maps key in Settings first.');
 
   try {
+    await resolveTypedAddresses();
     let start = t.start.place;
     if (t.start.type === 'gps') {
       setBusy('Finding your location…');
@@ -326,7 +402,9 @@ const actions = {
   down(i) { const s = state.trip.stops; [s[i + 1], s[i]] = [s[i], s[i + 1]]; saveTrip(); render(); },
   'change-place'(_, el) {
     const key = el.dataset.slot;
-    (key === 'start' ? state.trip.start : state.trip.stops[key]).place = null;
+    const target = key === 'start' ? state.trip.start : state.trip.stops[key];
+    target.typed = '';
+    target.place = null;
     saveTrip(); render();
   },
   calculate() { calculate(); },
@@ -334,7 +412,9 @@ const actions = {
   'go-plan'() { state.view = 'plan'; render(); },
   'save-trip'() {
     const t = state.trip;
-    if (t.stops.some((s) => !s.place)) return fail('Pick an address for every stop before saving.');
+    if (t.stops.some((s) => !s.place) || (t.start.type === 'place' && !t.start.place)) {
+      return fail('Tap a match for every address (look for the ✓) before saving.');
+    }
     const name = prompt('Name this trip (e.g. “Morning daycare run”):', t.name || '');
     if (!name?.trim()) return;
     t.name = name.trim();
@@ -435,6 +515,7 @@ async function init() {
   render();
   try {
     await loadGoogleMaps(state.apiKey, () => fail('Google rejected the API key. Check that it is correct and allowed for this website (see README).'));
+    search = await startPlaceSearch();
     state.mapsReady = true;
     render();
   } catch (err) {

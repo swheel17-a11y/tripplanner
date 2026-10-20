@@ -97,9 +97,19 @@ small { display: block; color: var(--muted); font-size: .85rem; }
 .seg button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .slot { margin-top: 10px; flex: 1; min-width: 0; }
 .stop-head .slot { margin-top: 0; }
-gmp-place-autocomplete { width: 100%; color-scheme: light dark; }
+.picker input { width: 100%; }
+.picker-status { margin: 6px 0 0; font-size: .9rem; color: var(--muted); min-height: 1.2em; }
+.picker-status:empty { display: none; }
+.picker-status.searching { color: var(--accent); }
+.picker-status.bad { color: var(--bad); }
+.suggestions { list-style: none; padding: 0; margin: 6px 0 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.suggestions:empty { display: none; }
+.suggestions li + li { border-top: 1px solid var(--line); }
+.suggestions button { width: 100%; text-align: left; border: 0; border-radius: 0; padding: 10px 12px; background: var(--card); }
+.suggestions button:active { background: var(--info-bg); }
+.tick { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--ok-bg); color: var(--ok); display: grid; place-items: center; font-weight: 700; }
 .chip { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
-.chip > div { min-width: 0; }
+.chip > div { min-width: 0; flex: 1; }
 .chip small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chip button { min-height: 40px; padding: 6px 12px; font-size: .9rem; }
 .stops { list-style: none; padding: 0; margin: 0; }

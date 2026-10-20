@@ -107,22 +107,66 @@ async function askGoogle(Route, from, to, when, model) {
   return routes[0].durationMillis / 1000;
 }
 
-/** An address search box. Calls onPick({ name, address, placeId, lat, lng }). */
-export async function createPlacePicker(onPick, near) {
-  const { PlaceAutocompleteElement } = await google.maps.importLibrary('places');
-  const el = new PlaceAutocompleteElement(near ? { locationBias: near } : {});
-  el.addEventListener('gmp-select', async ({ placePrediction }) => {
-    const place = placePrediction.toPlace();
-    await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
-    onPick({
-      name: place.displayName || place.formattedAddress,
-      address: place.formattedAddress,
-      placeId: place.id,
-      lat: place.location.lat(),
-      lng: place.location.lng(),
-    });
-  });
-  return el;
+/**
+ * Address search (Places API (New)). Returns { suggest(text, near), choose(suggestion) }.
+ * We draw our own list so the user can see "Searching…", "No matches", or Google's error.
+ */
+export async function startPlaceSearch() {
+  const { AutocompleteSessionToken, AutocompleteSuggestion } = await google.maps.importLibrary('places');
+  // Google bills a run of keystrokes plus the final pick as one "session".
+  let token = new AutocompleteSessionToken();
+
+  async function fetchSuggestions(input, near) {
+    const request = { input, sessionToken: token };
+    if (near) request.locationBias = { center: near, radius: 50000 }; // prefer places near you
+    try {
+      return await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+    } catch (err) {
+      if (near) return fetchSuggestions(input, null); // retry once without the nearby hint
+      console.error(err);
+      throw new Error(googleErrorText(err, 'address search'));
+    }
+  }
+
+  return {
+    async suggest(input, near) {
+      const { suggestions = [] } = await fetchSuggestions(input, near);
+      return suggestions.filter((s) => s.placePrediction).map((s) => {
+        const p = s.placePrediction;
+        return {
+          main: (p.mainText ?? p.text).toString(),
+          secondary: p.secondaryText?.toString() ?? '',
+          prediction: p,
+        };
+      });
+    },
+    async choose(suggestion) {
+      const place = suggestion.prediction.toPlace();
+      try {
+        await place.fetchFields({ fields: ['displayName', 'formattedAddress', 'location'] });
+      } catch (err) {
+        console.error(err);
+        throw new Error(googleErrorText(err, 'place lookup'));
+      }
+      token = new AutocompleteSessionToken(); // the pick ends this session
+      return {
+        name: place.displayName || suggestion.main,
+        address: place.formattedAddress,
+        placeId: place.id,
+        lat: place.location.lat(),
+        lng: place.location.lng(),
+      };
+    },
+  };
+}
+
+/** Turn Google's error into something actionable. */
+function googleErrorText(err, what) {
+  const msg = String(err?.message || err);
+  if (/PERMISSION_DENIED|not been used|disabled|not authorized|API_KEY|REQUEST_DENIED|blocked/i.test(msg)) {
+    return `Google refused the ${what}. Check that “Places API (New)” is enabled and ticked in your key’s API restrictions. (${msg})`;
+  }
+  return `Google ${what} failed: ${msg}`;
 }
 
 /** Ask the phone where we are. Needs HTTPS and the user's permission. */
