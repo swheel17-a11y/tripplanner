@@ -2,6 +2,29 @@
 
 const MIN = 60 * 1000;
 const LIVE_WINDOW = 60 * MIN; // in "auto" mode, legs leaving within the hour use live traffic
+export const DAILY_LIMIT = 200; // safety cap on drive-time requests per phone per day
+
+// ---------- Daily safety limit (counted on this phone) ----------
+
+function readUsage() {
+  const today = new Date().toDateString();
+  try {
+    const u = JSON.parse(localStorage.getItem('tp.usage'));
+    if (u?.date === today) return u;
+  } catch {}
+  return { date: today, count: 0 };
+}
+
+export const requestsToday = () => readUsage().count;
+
+function countRequest() {
+  const u = readUsage();
+  if (u.count >= DAILY_LIMIT) {
+    throw new Error(`Daily safety limit reached (${DAILY_LIMIT} Google requests on this phone). It resets at midnight.`);
+  }
+  u.count++;
+  localStorage.setItem('tp.usage', JSON.stringify(u));
+}
 
 let loading = null;
 
@@ -52,6 +75,7 @@ export async function makeDurationFn(points, trafficSetting, now) {
     modelsUsed.add(model);
     const key = `${leg}|${when ? when.getTime() : 'now'}|${model}`;
     if (!answers.has(key)) {
+      countRequest();
       const p = askGoogle(Route, points[leg], points[leg + 1], when, model);
       p.catch(() => answers.delete(key)); // don't remember failures
       answers.set(key, p);

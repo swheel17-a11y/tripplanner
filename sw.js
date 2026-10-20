@@ -1,7 +1,7 @@
 // sw.js — lets the app open instantly and install to the home screen.
 // "Network first": always try to get the newest files; fall back to the saved copy offline.
 // Google Maps requests are never cached (traffic must be fresh).
-const CACHE = 'tripplanner-v1';
+const CACHE = 'tripplanner-v2';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'planner.js', 'maps.js', 'manifest.json',
   'icons/icon-192.png', 'icons/apple-touch-icon.png'];
 

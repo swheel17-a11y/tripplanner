@@ -2,6 +2,7 @@
 import { planTrip, floorToMinute, ceilToMinute } from './planner.js';
 import {
   loadGoogleMaps, makeDurationFn, createPlacePicker, getCurrentPosition, googleMapsUrl,
+  requestsToday, DAILY_LIMIT,
 } from './maps.js';
 
 const MIN = 60 * 1000;
@@ -235,6 +236,10 @@ function settingsView() {
       ${radio('auto', 'Auto (recommended)', 'Live traffic once leaving is within an hour; pessimistic (“bad day”) estimates further ahead.')}
       ${radio('pessimistic', 'Always pessimistic', 'Safest for hard deadlines. Ignores luck.')}
       ${radio('live', 'Always live / best guess', 'Google’s typical estimate, using current conditions when leaving soon.')}
+    </section>
+    <section class="card">
+      <h2>Usage today</h2>
+      <p class="hint">${requestsToday()} of ${DAILY_LIMIT} drive-time requests used on this phone. Each “When do I leave?” uses about 5–10. Resets at midnight.</p>
     </section>
     <section class="card">
       <h2>Backup saved trips</h2>
