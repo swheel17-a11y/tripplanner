@@ -32,16 +32,17 @@ No backend, no build step: plain HTML/CSS/JavaScript.
 2. **Billing:** Google needs a card on file even for free use (menu ☰ → *Billing*). Personal
    use of this app should stay within Google's free monthly usage. Check current pricing at
    <https://mapsplatform.google.com/pricing/>.
-3. **Turn on 3 APIs:** ☰ → *APIs & Services → Library*. Search for and **Enable** each one:
+3. **Turn on 4 APIs:** ☰ → *APIs & Services → Library*. Search for and **Enable** each one:
    - **Maps JavaScript API**
    - **Places API (New)**
    - **Routes API**
+   - **Geocoding API** (shows the street address of your GPS location)
 4. **Create the key:** *APIs & Services → Credentials → + Create credentials → API key*.
    Copy it, then click **Edit API key** to lock it down:
    - **Application restrictions → Websites**, then add
      `https://YOUR-GITHUB-USERNAME.github.io/*`.
      The key now only works on your site. Anyone who copies it can't use it elsewhere.
-   - **API restrictions → Restrict key**, then tick only the 3 APIs above. **Save.**
+   - **API restrictions → Restrict key**, then tick only the 4 APIs above. **Save.**
 5. **Daily safety limit:** Google doesn't let you lower the Routes API daily quota, so the app
    has its own cap of **200 drive-time requests per phone per day**. Today's count is in
    *Settings → Usage today*. One "When do I leave?" uses roughly 5–10.

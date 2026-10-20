@@ -101,7 +101,7 @@ small { display: block; color: var(--muted); font-size: .85rem; }
 .picker-status { margin: 6px 0 0; font-size: .9rem; color: var(--muted); min-height: 1.2em; }
 .picker-status:empty { display: none; }
 .picker-status.searching { color: var(--accent); }
-.picker-status.bad { color: var(--bad); }
+.picker-status.bad, .bad-text { color: var(--bad); }
 .suggestions { list-style: none; padding: 0; margin: 6px 0 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .suggestions:empty { display: none; }
 .suggestions li + li { border-top: 1px solid var(--line); }

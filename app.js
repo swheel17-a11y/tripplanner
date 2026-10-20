@@ -1,7 +1,7 @@
 // app.js — screens, saved trips, and wiring the planner to Google.
 import { planTrip, floorToMinute, ceilToMinute } from './planner.js';
 import {
-  loadGoogleMaps, makeDurationFn, startPlaceSearch, getCurrentPosition, googleMapsUrl,
+  loadGoogleMaps, makeDurationFn, startPlaceSearch, getCurrentPosition, googleMapsUrl, addressFor, metersBetween,
   requestsToday, DAILY_LIMIT,
 } from './maps.js';
 
@@ -32,8 +32,12 @@ const state = {
   notice: '',     // short confirmation, e.g. "Saved"
   error: '',
   mapsReady: false,
-  lastGps: null,
+  // Latest GPS fix: { lat, lng, accuracy, at, address, addressError }, or { locating } / { error }
+  gps: null,
 };
+
+// Bias address searches toward where you are, once we know.
+const nearHint = () => (state.gps?.lat ? { lat: state.gps.lat, lng: state.gps.lng } : null);
 
 let search = null; // Google address search, ready once Maps loads
 
@@ -83,7 +87,7 @@ function banner() {
 function planView() {
   const t = state.trip;
   const start = t.start.type === 'gps'
-    ? '<p class="hint">Uses your GPS each time you calculate.</p>'
+    ? `<div id="gps-status" class="gps">${gpsStatusHtml()}</div>`
     : '<div class="slot" data-slot="start"></div>';
   return `${banner()}
     ${t.name ? `<p class="trip-name">${esc(t.name)}</p>` : ''}
@@ -130,6 +134,57 @@ function stopCard(s, i) {
   </li>`;
 }
 
+// ---------- GPS start ----------
+
+function gpsStatusHtml() {
+  const g = state.gps;
+  if (!g) return '<button class="wide" data-act="gps-refresh">📍 Check my location</button>';
+  if (g.locating) return '<p class="picker-status searching">📍 Finding your location…</p>';
+  if (g.error) {
+    return `<p class="picker-status bad">${esc(g.error)}</p>
+      <button data-act="gps-refresh">Try again</button>`;
+  }
+  const where = g.address || `${g.lat.toFixed(5)}, ${g.lng.toFixed(5)}`;
+  return `<div class="chip"><span class="tick">📍</span><div>
+      <b>${esc(where)}</b>
+      <small>Updated ${fmtTime(g.at)} · accurate to about ${Math.round(g.accuracy)} m</small>
+      ${g.addressError ? `<small class="bad-text">${esc(g.addressError)}</small>` : ''}
+    </div><button data-act="gps-refresh">Update</button></div>`;
+}
+
+// Update just the GPS box, so typing in other boxes isn't interrupted.
+function showGps() {
+  const el = $('#gps-status');
+  if (el) el.innerHTML = gpsStatusHtml();
+}
+
+/** Get a fresh GPS fix and its street address. Throws if GPS fails. */
+async function refreshGps() {
+  const prev = state.gps;
+  state.gps = { locating: true };
+  showGps();
+  try {
+    const pos = await getCurrentPosition();
+    const g = { ...pos, at: new Date() };
+    if (prev?.address && metersBetween(prev, pos) < 50) {
+      g.address = prev.address; // haven't moved: skip the lookup
+    } else if (state.mapsReady) {
+      const { address, error } = await addressFor(pos);
+      g.address = address;
+      g.addressError = error;
+    }
+    state.gps = g;
+    return g;
+  } catch (err) {
+    state.gps = { error: err.message };
+    throw err;
+  } finally {
+    showGps();
+  }
+}
+
+const shortAddress = (a) => (a ? a.split(',')[0] : 'Current location');
+
 /** Each address spot shows either the chosen place (✓) or our search box. */
 function fillPlaceSlots() {
   document.querySelectorAll('.slot').forEach((slot) => {
@@ -175,7 +230,7 @@ function mountPicker(slot, target) {
     const mine = ++seq;
     show('Searching…', 'searching');
     try {
-      const found = await search.suggest(text, state.lastGps);
+      const found = await search.suggest(text, nearHint());
       if (mine !== seq) return; // a newer search has started
       results = found;
       if (!found.length) return show('No matches. Try adding the street or town.', 'bad');
@@ -221,7 +276,7 @@ async function resolveTypedAddresses() {
     if (target.place) continue;
     if (!target.typed) throw new Error(`Type an address for ${label}.`);
     setBusy(`Looking up “${target.typed}”…`);
-    const [best] = await search.suggest(target.typed, state.lastGps);
+    const [best] = await search.suggest(target.typed, nearHint());
     if (!best) throw new Error(`Couldn’t find “${target.typed}” for ${label}. Try a fuller address.`);
     target.place = await search.choose(best);
     delete target.typed;
@@ -342,8 +397,8 @@ async function calculate({ compare = false } = {}) {
     let start = t.start.place;
     if (t.start.type === 'gps') {
       setBusy('Finding your location…');
-      start = await getCurrentPosition();
-      state.lastGps = { lat: start.lat, lng: start.lng };
+      const g = await refreshGps();
+      start = { name: shortAddress(g.address), lat: g.lat, lng: g.lng };
     }
     setBusy('Checking traffic…');
     const now = new Date();
@@ -394,7 +449,8 @@ setInterval(tick, 30 * 1000);
 document.addEventListener('visibilitychange', tick);
 
 const actions = {
-  'start-gps'() { state.trip.start = { type: 'gps' }; saveTrip(); render(); },
+  'start-gps'() { state.trip.start = { type: 'gps' }; saveTrip(); render(); refreshGps().catch(() => {}); },
+  'gps-refresh'() { refreshGps().catch(() => {}); },
   'start-place'() { if (state.trip.start.type !== 'place') state.trip.start = { type: 'place', place: null }; saveTrip(); render(); },
   'add-stop'() { state.trip.stops.push(blankStop()); saveTrip(); render(); },
   remove(i) { state.trip.stops.splice(i, 1); saveTrip(); render(); },
@@ -465,7 +521,13 @@ const actions = {
 
 document.addEventListener('click', (e) => {
   const nav = e.target.closest('nav button');
-  if (nav) { state.view = nav.dataset.view; state.error = ''; render(); return; }
+  if (nav) {
+    state.view = nav.dataset.view; state.error = ''; render();
+    // Coming back to Plan after a while? Re-check where we are.
+    const stale = !state.gps?.at || Date.now() - state.gps.at > 2 * MIN;
+    if (state.view === 'plan' && state.trip.start.type === 'gps' && state.mapsReady && stale) refreshGps().catch(() => {});
+    return;
+  }
   const el = e.target.closest('[data-act]');
   if (!el || el.disabled) return;
   actions[el.dataset.act]?.(el.dataset.i !== undefined ? +el.dataset.i : undefined, el);
@@ -518,6 +580,7 @@ async function init() {
     search = await startPlaceSearch();
     state.mapsReady = true;
     render();
+    if (state.trip.start.type === 'gps') refreshGps().catch(() => {});
   } catch (err) {
     fail(err.message);
   }

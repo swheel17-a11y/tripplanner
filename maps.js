@@ -174,13 +174,41 @@ export function getCurrentPosition() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) return reject(new Error('This browser has no GPS access.'));
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ name: 'Current location', lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
       (err) => reject(new Error(err.code === 1
         ? 'Location permission is off. Allow it for this site, or type a start address.'
         : 'Could not get your location. Try again, or type a start address.')),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
     );
   });
+}
+
+/**
+ * Turn GPS coordinates into a street address (Geocoding API).
+ * Returns { address } or { error } — never throws, since the address is just a nice-to-have.
+ */
+export async function addressFor({ lat, lng }) {
+  try {
+    countRequest();
+    const { Geocoder } = await google.maps.importLibrary('geocoding');
+    const { results } = await new Geocoder().geocode({ location: { lat, lng } });
+    return results?.[0] ? { address: results[0].formatted_address } : { error: 'No street address found here.' };
+  } catch (err) {
+    console.error(err);
+    const msg = String(err?.message || err);
+    return {
+      error: /REQUEST_DENIED|not authorized|not enabled|PERMISSION/i.test(msg)
+        ? 'To show the street address, turn on “Geocoding API” and tick it in your key’s API restrictions.'
+        : `Couldn’t look up the street address. (${msg})`,
+    };
+  }
+}
+
+/** Rough distance in meters between two GPS points (fine for "did I move?"). */
+export function metersBetween(a, b) {
+  const dLat = (a.lat - b.lat) * 111320;
+  const dLng = (a.lng - b.lng) * 111320 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
 }
 
 /**
