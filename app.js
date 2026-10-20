@@ -80,7 +80,8 @@ function render() {
 
 function banner() {
   const info = state.busy || state.notice;
-  return (info ? `<div class="banner busy">${esc(info)}</div>` : '')
+  return (state.setupMsg ? `<div class="banner ok">${state.setupMsg}</div>` : '')
+    + (info ? `<div class="banner busy">${esc(info)}</div>` : '')
     + (state.error ? `<div class="banner error">${esc(state.error)}</div>` : '');
 }
 
@@ -365,7 +366,9 @@ function settingsView() {
         autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-1p-ignore data-lpignore="true">
       <div class="row">
         <button class="primary" data-act="save-key">Save key</button>
+        <button data-act="paste-key">📋 Paste</button>
       </div>
+      <p class="hint">Got a setup link? You can paste the whole link here too.</p>
     </section>
     <section class="card">
       <h2>Traffic</h2>
@@ -377,6 +380,12 @@ function settingsView() {
       <h2>Usage today</h2>
       <p class="hint">${requestsToday()} of ${DAILY_LIMIT} drive-time requests used on this phone. Each “When do I leave?” uses about 5–10. Resets at midnight.</p>
     </section>
+    ${state.apiKey ? `<section class="card">
+      <h2>Share with family</h2>
+      <p class="hint">Sends a link that sets up Trip Planner on another phone with your key. Only send it to people you trust.</p>
+      ${state.saved.length ? `<label class="check"><input type="checkbox" id="share-trips" checked> Include my ${state.saved.length} saved trip${state.saved.length > 1 ? 's' : ''}</label>` : ''}
+      <button class="wide primary" data-act="share-setup">Send setup link</button>
+    </section>` : ''}
     <section class="card">
       <h2>Backup saved trips</h2>
       <div class="row">
@@ -501,15 +510,28 @@ const actions = {
     if (!confirm(`Delete “${state.saved[i].name}”?`)) return;
     state.saved.splice(i, 1); store.set('saved', state.saved); render();
   },
-  async 'save-key'() {
-    const key = $('#api-key').value.trim();
-    if (!key) return fail('Paste your key into the box first.');
-    try { store.set('key', key); } catch { /* checked just below */ }
-    if (store.get('key', '') !== key) {
-      return fail('This browser won’t save data for this site (private browsing, or “block all cookies/site data” is on). The key can’t be remembered here.');
+  'save-key'() { saveKeyText($('#api-key').value); },
+  async 'paste-key'() {
+    try {
+      const text = await navigator.clipboard.readText();
+      $('#api-key').value = text;
+      saveKeyText(text);
+    } catch {
+      fail('Couldn’t read the clipboard. Press and hold in the box, choose Paste, then tap Save key.');
     }
-    await askToKeepData();
-    location.reload(); // Google Maps can only load once per page, so start fresh with the new key
+  },
+  async 'share-setup'() {
+    const url = setupLink($('#share-trips')?.checked);
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'Trip Planner', text: 'Tap this link to set up Trip Planner on your phone:', url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        notify('Setup link copied. Paste it into a text message.');
+      }
+    } catch (err) {
+      if (err?.name !== 'AbortError') prompt('Copy this setup link:', url);
+    }
   },
   export() {
     const blob = new Blob([JSON.stringify({ saved: state.saved }, null, 2)], { type: 'application/json' });
@@ -545,11 +567,7 @@ document.addEventListener('change', async (e) => {
   if (el.id === 'import-file' && el.files[0]) {
     try {
       const data = JSON.parse(await el.files[0].text());
-      const names = new Set(state.saved.map((t) => t.name));
-      const incoming = (data.saved || []).filter((t) => t.name && Array.isArray(t.stops) && !names.has(t.name));
-      state.saved.push(...incoming);
-      store.set('saved', state.saved);
-      notify(`Imported ${incoming.length} trip(s).`);
+      notify(`Imported ${mergeTrips(data.saved)} trip(s).`);
     } catch { fail('That file is not a trip backup.'); }
     return;
   }
@@ -569,6 +587,65 @@ document.addEventListener('change', async (e) => {
 
 // ---------- Start up ----------
 
+// ---------- Setup links: share the key (and trips) with family ----------
+// Everything rides after "#", which browsers never send to any server.
+
+function encodeSetup(obj) {
+  let bin = '';
+  new TextEncoder().encode(JSON.stringify(obj)).forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeSetup(text) {
+  const bin = atob(text.replace(/-/g, '+').replace(/_/g, '/'));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0))));
+}
+
+function setupLink(includeTrips) {
+  const data = { k: state.apiKey, t: includeTrips ? state.saved : [] };
+  return `${location.origin}${location.pathname}#setup=${encodeSetup(data)}`;
+}
+
+/** Add trips we don't already have (matched by name). Returns how many were added. */
+function mergeTrips(trips) {
+  const names = new Set(state.saved.map((t) => t.name));
+  const incoming = (trips || []).filter((t) => t?.name && Array.isArray(t.stops) && !names.has(t.name));
+  state.saved.push(...incoming);
+  store.set('saved', state.saved);
+  return incoming.length;
+}
+
+/** Apply a setup link. Returns { key, added } or null if the text has no valid setup data. */
+function applySetup(text) {
+  const m = /setup=([A-Za-z0-9_-]+)/.exec(text);
+  if (!m) return null;
+  let data;
+  try { data = decodeSetup(m[1]); } catch { return null; }
+  if (typeof data?.k !== 'string' || !data.k) return null;
+  return { key: data.k, added: mergeTrips(data.t) };
+}
+
+/** Save a pasted key or setup link, check it stuck, then restart with it. */
+async function saveKeyText(text) {
+  text = text.trim();
+  if (!text) return fail('Paste your key into the box first.');
+  let key = text;
+  if (text.includes('setup=')) {
+    const r = applySetup(text);
+    if (!r) return fail('That setup link looks cut off. Copy the whole link and try again.');
+    key = r.key;
+  }
+  try { store.set('key', key); } catch { /* checked just below */ }
+  if (store.get('key', '') !== key) {
+    return fail('This browser won’t save data for this site (private browsing, or “block all cookies/site data” is on). The key can’t be remembered here.');
+  }
+  await askToKeepData();
+  location.replace(location.pathname); // restart without any link data; Google Maps can only load once per page
+}
+
+const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIPhone = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+
 /** Ask the browser not to clear this app's saved data when space runs low. */
 async function askToKeepData() {
   try { await navigator.storage?.persist?.(); } catch { /* not supported: fine */ }
@@ -576,6 +653,22 @@ async function askToKeepData() {
 
 async function init() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+
+  // Opened from a setup link?
+  const setup = location.hash.includes('setup=') && applySetup(location.hash);
+  if (setup) {
+    try { store.set('key', setup.key); } catch { /* reported below if it didn't stick */ }
+    state.apiKey = store.get('key', '');
+    const trips = setup.added ? ` ${setup.added} saved trip${setup.added > 1 ? 's' : ''} added.` : '';
+    if (isInstalled() || !isIPhone()) {
+      history.replaceState(null, '', location.pathname); // tidy the address bar
+      if (state.apiKey) state.setupMsg = `✓ You’re all set up!${esc(trips)}`;
+    } else {
+      // iPhone Safari: keep the link in the address bar so the home-screen app gets it too.
+      state.setupMsg = `✓ Set up!${esc(trips)}<br><b>Next:</b> tap the Share button <b>⬆︎</b>, choose <b>Add to Home Screen</b>, then open Trip Planner from your home screen.`;
+    }
+  }
+
   if (!state.apiKey) {
     state.view = 'settings';
     state.error = 'No Google Maps key on this device yet. Paste your key below to get started.';

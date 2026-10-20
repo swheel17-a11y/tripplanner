@@ -77,6 +77,16 @@ On first open: **Settings** → paste your key → **Save key**. Allow location 
 > iPhone note: the home-screen app keeps its **own** storage, separate from Safari. Add the key
 > and trips inside the installed app. Use *Settings → Export* now and then to back up saved trips.
 
+## Set up another phone (family)
+
+On a phone that already works: **Settings → Share with family → Send setup link**, then send it
+by text. It carries your key (and, if ticked, your saved trips) after the `#` in the link, which
+browsers never send to any server. Only send it to people you trust.
+
+On the other iPhone: tap the link → it opens in Safari, already set up → **Share ⬆︎ → Add to
+Home Screen** → open Trip Planner from the home screen. If the home-screen app asks for a key,
+copy the setup link from Messages and tap **📋 Paste** in Settings.
+
 ## How the timing works
 
 Google's drive times need a **departure** time, but you have an **arrival** deadline. So for each

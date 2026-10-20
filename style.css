@@ -88,6 +88,7 @@ input[type=checkbox], input[type=radio] { width: 24px; height: 24px; accent-colo
 small { display: block; color: var(--muted); font-size: .85rem; }
 .banner { border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; font-weight: 500; }
 .banner.busy { background: var(--info-bg); }
+.banner.ok { background: var(--ok-bg); color: var(--ok); }
 .banner.error { background: var(--bad-bg); color: var(--bad); }
 .key-status { font-weight: 600; margin: 0 0 8px; }
 .key-status.ok { color: var(--ok); }
