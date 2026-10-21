@@ -479,6 +479,14 @@ const actions = {
   },
   calculate() { calculate(); },
   refresh() { calculate({ compare: true }); },
+  async 'copy-setup'(_, el) {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      el.textContent = '✓ Copied';
+    } catch {
+      prompt('Copy this setup link:', location.href);
+    }
+  },
   'stop-trip'() { state.result.stopped = 'user'; render(); },
   // Heading out with Google Maps: no need to keep checking traffic here.
   navigate() { state.result.stopped = 'nav'; setTimeout(render, 0); },
@@ -670,13 +678,18 @@ async function init() {
       if (state.apiKey) state.setupMsg = `✓ You’re all set up!${esc(trips)}`;
     } else {
       // iPhone Safari: keep the link in the address bar so the home-screen app gets it too.
-      state.setupMsg = `✓ Set up!${esc(trips)}<br><b>Next:</b> tap the Share button <b>⬆︎</b>, choose <b>Add to Home Screen</b>, then open Trip Planner from your home screen.`;
+      state.setupMsg = `✓ Set up!${esc(trips)} To put it on your home screen:
+        <ol class="steps">
+          <li><button data-act="copy-setup">📋 Copy setup link</button> (just in case)</li>
+          <li>Tap Share <b>⬆︎</b> → <b>Add to Home Screen</b></li>
+          <li>Open Trip Planner from your home screen. If it asks for a key, tap <b>📋 Paste</b>.</li>
+        </ol>`;
     }
   }
 
   if (!state.apiKey) {
     state.view = 'settings';
-    state.error = 'No Google Maps key on this device yet. Paste your key below to get started.';
+    state.error = 'No Google Maps key on this device yet. Paste your key below, or if someone sent you a setup link: copy the link, then tap 📋 Paste.';
     render();
     return;
   }

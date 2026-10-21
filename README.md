@@ -83,9 +83,10 @@ On a phone that already works: **Settings → Share with family → Send setup l
 by text. It carries your key (and, if ticked, your saved trips) after the `#` in the link, which
 browsers never send to any server. Only send it to people you trust.
 
-On the other iPhone: tap the link → it opens in Safari, already set up → **Share ⬆︎ → Add to
-Home Screen** → open Trip Planner from the home screen. If the home-screen app asks for a key,
-copy the setup link from Messages and tap **📋 Paste** in Settings.
+On the other iPhone: tap the link → it opens in Safari, already set up → tap **📋 Copy setup
+link** → **Share ⬆︎ → Add to Home Screen** → open Trip Planner from the home screen. The
+home-screen app has its own storage; if it asks for a key, tap **📋 Paste** in Settings (the
+copied link works there).
 
 ## How the timing works
 

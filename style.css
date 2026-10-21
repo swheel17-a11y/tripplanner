@@ -89,6 +89,9 @@ small { display: block; color: var(--muted); font-size: .85rem; }
 .banner { border-radius: 12px; padding: 12px 14px; margin: 0 0 12px; font-weight: 500; }
 .banner.busy { background: var(--info-bg); }
 .banner.ok { background: var(--ok-bg); color: var(--ok); }
+.steps { margin: 8px 0 0; padding-left: 1.3em; font-weight: 400; color: var(--text); }
+.steps li { margin: 6px 0; }
+.steps button { min-height: 40px; padding: 6px 10px; }
 .banner.error { background: var(--bad-bg); color: var(--bad); }
 .key-status { font-weight: 600; margin: 0 0 8px; }
 .key-status.ok { color: var(--ok); }

@@ -7,7 +7,16 @@
   <meta name="description" content="Work backward from a deadline to know exactly when to leave.">
   <meta name="theme-color" content="#1a56db">
   <!-- Home-screen install (Android uses the manifest, iPhone uses the apple-* tags) -->
-  <link rel="manifest" href="manifest.json">
+  <script>
+    // iPhone opened from a setup link: leave out the manifest, so "Add to Home Screen" saves
+    // this exact link (with the setup code) instead of the plain start page.
+    if (!(/iPhone|iPad|iPod/.test(navigator.userAgent) && location.hash.includes('setup=') && !navigator.standalone)) {
+      const m = document.createElement('link');
+      m.rel = 'manifest';
+      m.href = 'manifest.json';
+      document.head.append(m);
+    }
+  </script>
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
