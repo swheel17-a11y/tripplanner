@@ -11,7 +11,7 @@ times with traffic, and shows a big **LEAVE AT** time plus a timeline for every 
 - **Auto-refresh:** once leave time is under an hour away, the Leave screen re-checks traffic
   every 5 minutes while it's open, and warns you if you need to leave earlier.
 - **Saved trips:** save a trip by name and reload it later. Everything stays on your phone.
-- **Open in Google Maps:** hands all your stops to the Google Maps app for navigation.
+- **Navigation:** Google Maps (all stops in one link) or Apple Maps (one button per stop), chosen per phone in Settings.
 
 No backend, no build step: plain HTML/CSS/JavaScript.
 

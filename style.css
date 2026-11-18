@@ -151,3 +151,6 @@ small { display: block; color: var(--muted); font-size: .85rem; }
 /* Saved screen */
 .saved { list-style: none; padding: 0; margin: 0; }
 .saved small { margin-top: 4px; }
+
+/* Apple Maps: one button per stop */
+.nav-list .button { margin: 8px 0 0; }

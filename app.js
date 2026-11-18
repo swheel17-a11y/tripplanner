@@ -1,7 +1,7 @@
 // app.js — screens, saved trips, and wiring the planner to Google.
 import { planTrip, floorToMinute, ceilToMinute } from './planner.js';
 import {
-  loadGoogleMaps, makeDurationFn, startPlaceSearch, getCurrentPosition, googleMapsUrl, addressFor, metersBetween,
+  loadGoogleMaps, makeDurationFn, startPlaceSearch, getCurrentPosition, googleMapsUrl, appleMapsUrl, addressFor, metersBetween,
   requestsToday, DAILY_LIMIT,
 } from './maps.js';
 
@@ -329,13 +329,25 @@ function resultView() {
     <p class="hint center">${trafficText} · checked ${fmtTime(r.checkedAt)}${autoOn ? ' · auto-updating every 5 min' : ''}</p>
     ${r.stopped ? `<div class="banner busy">⏹ Trip stopped: no more traffic checks${r.stopped === 'nav' ? ' while you navigate' : ''}. Tap “Refresh traffic” to start again.</div>` : ''}
     <ol class="timeline">${rows}</ol>
-    <a class="wide primary button" data-act="navigate" href="${esc(googleMapsUrl(stops.map((s) => s.place)))}" target="_blank" rel="noopener">Open in Google Maps</a>
+    ${navButtons(stops)}
     <div class="row">
       <button data-act="refresh" ${state.busy ? 'disabled' : ''}>↻ Refresh traffic</button>
       <button data-act="go-plan">Edit trip</button>
     </div>
     ${!r.stopped && plan.mode !== 'nodeadline' ? '<button class="wide" data-act="stop-trip">⏹ Stop trip (no more traffic checks)</button>' : ''}
     ${state.trip.name ? '' : '<button class="wide" data-act="save-trip">💾 Save this trip</button>'}`;
+}
+
+/** Google Maps takes every stop in one link; Apple Maps takes one destination per link. */
+function navButtons(stops) {
+  if (state.settings.nav !== 'apple') {
+    return `<a class="wide primary button" data-act="navigate" href="${esc(googleMapsUrl(stops.map((s) => s.place)))}" target="_blank" rel="noopener">Open in Google Maps</a>`;
+  }
+  return `<section class="card nav-list">
+      <h2>Directions in Apple Maps</h2>
+      <p class="hint">Apple Maps goes one stop at a time. Tap the next stop when you’re ready to drive.</p>
+      ${stops.map((s, i) => `<a class="wide ${i === 0 ? 'primary ' : ''}button" data-act="navigate" href="${esc(appleMapsUrl(s.place))}" target="_blank" rel="noopener">${i + 1} · ${esc(s.place.name)}</a>`).join('')}
+    </section>`;
 }
 
 function savedView() {
@@ -371,6 +383,13 @@ function settingsView() {
         <button data-act="paste-key">📋 Paste</button>
       </div>
       <p class="hint">Got a setup link? You can paste the whole link here too.</p>
+    </section>
+    <section class="card">
+      <h2>Navigation app</h2>
+      <label class="radio"><input type="radio" name="nav" value="google" ${state.settings.nav !== 'apple' ? 'checked' : ''}>
+        <span><b>Google Maps</b><small>Opens with every stop already added.</small></span></label>
+      <label class="radio"><input type="radio" name="nav" value="apple" ${state.settings.nav === 'apple' ? 'checked' : ''}>
+        <span><b>Apple Maps</b><small>One button per stop (Apple Maps takes one destination at a time).</small></span></label>
     </section>
     <section class="card">
       <h2>Traffic</h2>
@@ -424,7 +443,9 @@ async function calculate({ compare = false } = {}) {
       stops: t.stops.map((s) => ({ name: s.place.name, dwellMin: +s.dwellMin || 0, deadline: s.deadline, earlyMin: +s.earlyMin || 0 })),
     });
     const prev = state.result;
-    const change = compare && prev?.plan.mode === 'ontime' && plan.mode === 'ontime'
+    // Only compare checks for the same deadline (not today's vs. tomorrow's).
+    const sameTrip = prev?.plan.deadline?.getTime() === plan.deadline?.getTime();
+    const change = compare && sameTrip && prev.plan.mode === 'ontime' && plan.mode === 'ontime'
       ? Math.round((prev.plan.leaveAt - plan.leaveAt) / MIN) : 0;
     state.result = { plan, checkedAt: now, models: [...getDuration.modelsUsed], startName: start.name, change };
     state.busy = '';
@@ -576,6 +597,9 @@ document.addEventListener('change', async (e) => {
   const el = e.target;
   if (el.name === 'traffic') {
     state.settings.traffic = el.value; store.set('settings', state.settings); return;
+  }
+  if (el.name === 'nav') {
+    state.settings.nav = el.value; store.set('settings', state.settings); return;
   }
   if (el.id === 'import-file' && el.files[0]) {
     try {

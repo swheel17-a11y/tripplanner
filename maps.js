@@ -212,6 +212,15 @@ export function metersBetween(a, b) {
 }
 
 /**
+ * A link that opens Apple Maps with driving directions from here to ONE place.
+ * (Apple Maps links can't carry a list of stops, so the app shows one link per stop.)
+ */
+export function appleMapsUrl(place) {
+  const q = new URLSearchParams({ daddr: place.address || `${place.lat},${place.lng}`, dirflg: 'd' });
+  return 'https://maps.apple.com/?' + q;
+}
+
+/**
  * A link that opens the Google Maps app (iPhone or Android) with every stop filled in.
  * No origin is given, so Maps starts from wherever the phone is right now.
  */
